@@ -19,6 +19,7 @@ public class MainForm {
     private JTextField textName;
     private JLabel labelName;
     private JButton saveButton;
+    private JButton reloadButton;
 
     private boolean toSave;
 
@@ -69,6 +70,12 @@ public class MainForm {
         saveButton.setFont(new Font("Arial", Font.PLAIN, 16));
         panel.add(saveButton, constraints);
 
+        reloadButton = new JButton("reload");
+        constraints.gridx = 1;
+        constraints.gridy = 3;
+        reloadButton.setFont(new Font("Arial", Font.PLAIN, 16));
+        panel.add(reloadButton, constraints);
+
         mainFrame.add(mainPanel);
         mainPanel.add(panel);
 
@@ -110,5 +117,13 @@ public class MainForm {
 
     public void setToSave(boolean toSave) {
         this.toSave = toSave;
+    }
+
+    public JButton getReloadButton() {
+        return reloadButton;
+    }
+
+    public void setReloadButton(JButton reloadButton) {
+        this.reloadButton = reloadButton;
     }
 }

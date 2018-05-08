@@ -14,12 +14,12 @@ import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.URI;
 import java.net.URL;
-import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -40,6 +40,7 @@ public class MainClass {
     private final FaceService faceService;
     private final Recognizer recognizer;
     private final HumanService humanService;
+    private boolean isInitialization;
 
     private String classifierName = "haarcascade_frontalface_alt_tree.xml";
 
@@ -61,6 +62,14 @@ public class MainClass {
 
             final MainForm mainForm = new MainForm();
             mainForm.create(grabbedImage.imageHeight, grabbedImage.imageWidth);
+            mainForm.getReloadButton().addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    isInitialization = true;
+                    recognizer.init();
+                    isInitialization = false;
+                }
+            });
             grabber.setFrameRate(grabber.getFrameRate());
 
             final CvMemStorage storage = CvMemStorage.create();
@@ -81,15 +90,15 @@ public class MainClass {
                 final IplImage grayImage = IplImage.create(convert.width(), convert.height(), IPL_DEPTH_8U, 1);
                 cvCvtColor(convert, grayImage, CV_BGR2GRAY);
 
-                final CvSeq faces = cvHaarDetectObjects(grayImage, cascade, storage, 1.1, 1,
+                final CvSeq faces = cvHaarDetectObjects(grayImage, cascade, storage, 1.1, 3,
                         CV_HAAR_DO_CANNY_PRUNING);
 
                 for (int i = 0; i < faces.total(); i++) {
-                    final CvRect r = new CvRect(cvGetSeqElem(faces, i));
+                    final CvRect rectangle = new CvRect(cvGetSeqElem(faces, i));
 
                     final IplImage temp = cvCreateImage(cvGetSize(convert), convert.depth(), convert.nChannels());
                     cvCopy(convert, temp);
-                    cvSetImageROI(temp, new CvRect(r.x(), r.y(), r.width(), r.height()));
+                    cvSetImageROI(temp, new CvRect(rectangle.x(), rectangle.y(), rectangle.width(), rectangle.height()));
 
                     final IplImage cropped = cvCreateImage(cvGetSize(temp), temp.depth(), temp.nChannels());
                     cvCopy(temp, cropped);
@@ -107,14 +116,16 @@ public class MainClass {
                         mainForm.setToSave(false);
                     }
 
-                    cvRectangle(convert, cvPoint(r.x(), r.y()), cvPoint(r.x() + r.width(), r.y() + r.height()),
-                            CvScalar.BLUE, 3, CV_AA, 0);
+                    cvRectangle(convert, cvPoint(rectangle.x(), rectangle.y()), cvPoint(rectangle.x() + rectangle.width(),
+                            rectangle.y() + rectangle.height()), CvScalar.BLUE, 3, CV_AA, 0);
 
+                    if (isInitialization) continue;
                     final int recognizedFace = recognizer.recognize(cropped);
 
                     final HumanEntity human = humanService.get((long) recognizedFace);
                     final String text = human == null ? "Unknown" : human.getName();
-                    cvPutText(convert, text, cvPoint(r.x(), r.y() - 10), cvFont(3, 3), CvScalar.BLUE);
+                    cvPutText(convert, text, cvPoint(rectangle.x(), rectangle.y() - 10), cvFont(3, 3),
+                            CvScalar.BLUE);
 
                     cvReleaseImage(temp);
                     cvReleaseImage(cropped);

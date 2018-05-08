@@ -70,7 +70,7 @@ public class Recognizer {
      * @param faceData faces.
      * @return recognized face.
      */
-    public int recognize(IplImage faceData) throws IOException {
+    public int recognize(final IplImage faceData) throws IOException {
         final Mat face = cvarrToMat(faceData);
         final Mat grayFace = new Mat();
         cvtColor(face, grayFace, CV_BGR2GRAY);
