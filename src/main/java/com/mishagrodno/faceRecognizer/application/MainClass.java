@@ -5,10 +5,11 @@ import com.mishagrodno.faceRecognizer.db.entity.HumanEntity;
 import com.mishagrodno.faceRecognizer.db.service.FaceService;
 import com.mishagrodno.faceRecognizer.db.service.HumanService;
 import org.bytedeco.javacpp.Loader;
-import org.bytedeco.javacpp.opencv_objdetect.CvHaarClassifierCascade;
+import org.bytedeco.javacpp.opencv_face.FacemarkKazemi;
+import org.bytedeco.javacpp.opencv_objdetect.CascadeClassifier;
 import org.bytedeco.javacv.Frame;
-import org.bytedeco.javacv.FrameGrabber;
-import org.bytedeco.javacv.VideoInputFrameGrabber;
+import org.bytedeco.javacv.OpenCVFrameConverter;
+import org.bytedeco.javacv.OpenCVFrameGrabber;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -24,10 +25,8 @@ import java.nio.file.Paths;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static org.bytedeco.javacpp.helper.opencv_objdetect.cvHaarDetectObjects;
 import static org.bytedeco.javacpp.opencv_core.*;
 import static org.bytedeco.javacpp.opencv_imgproc.*;
-import static org.bytedeco.javacpp.opencv_objdetect.CV_HAAR_DO_CANNY_PRUNING;
 
 /**
  * Application class.
@@ -40,9 +39,11 @@ public class MainClass {
     private final FaceService faceService;
     private final Recognizer recognizer;
     private final HumanService humanService;
+    private final OpenCVFrameConverter.ToMat toMat = new OpenCVFrameConverter.ToMat();
+    private final MainForm mainForm = new MainForm();
     private boolean isInitialization;
 
-    private String classifierName = "haarcascade_frontalface_alt_tree.xml";
+    private String classifierName = "frontal_face.xml";
 
     @Autowired
     public MainClass(FaceService faceService, Recognizer recognizer, HumanService humanService) {
@@ -56,23 +57,17 @@ public class MainClass {
      */
     public void start() {
         try {
-            final FrameGrabber grabber = new VideoInputFrameGrabber(0);
+            final OpenCVFrameGrabber grabber = new OpenCVFrameGrabber(0);
             grabber.start();
             Frame grabbedImage = grabber.grab();
 
-            final MainForm mainForm = new MainForm();
             mainForm.create(grabbedImage.imageHeight, grabbedImage.imageWidth);
-            mainForm.getReloadButton().addActionListener(new ActionListener() {
-                @Override
-                public void actionPerformed(ActionEvent e) {
-                    isInitialization = true;
-                    recognizer.init();
-                    isInitialization = false;
-                }
+            mainForm.getReloadButton().addActionListener(e -> {
+                isInitialization = true;
+                recognizer.init();
+                isInitialization = false;
             });
             grabber.setFrameRate(grabber.getFrameRate());
-
-            final CvMemStorage storage = CvMemStorage.create();
 
             final URL classifierURL = getClass().getClassLoader().getResource(classifierName);
 
@@ -80,57 +75,37 @@ public class MainClass {
                     .extractResource(classifierURL, null, "classifier", ".xml")
                     .getAbsolutePath();
 
-            final CvHaarClassifierCascade cascade = new CvHaarClassifierCascade(cvLoad(classifierLocation));
+            final CascadeClassifier cascade = new CascadeClassifier(classifierLocation);
+
+            final FacemarkKazemi facemark = FacemarkKazemi.create();
+
+            final URL landmarkURL = getClass().getClassLoader().getResource("face_landmark_model.dat");
+
+            final String landmarkLocation = Loader
+                    .extractResource(landmarkURL, null, "landmark", ".dat")
+                    .getAbsolutePath();
+
+            facemark.loadModel(landmarkLocation);
 
             recognizer.init();
+            final OpenCVFrameConverter.ToMat toMat = new OpenCVFrameConverter.ToMat();
 
             while (mainForm.getMainFrame().isVisible() && (grabbedImage = grabber.grab()) != null) {
-                final IplImage convert = Utils.convertToIplImage(grabbedImage);
 
-                final IplImage grayImage = IplImage.create(convert.width(), convert.height(), IPL_DEPTH_8U, 1);
-                cvCvtColor(convert, grayImage, CV_BGR2GRAY);
+                Mat result = recognize(toMat.convert(grabbedImage), 0.0, cascade);
+                result = recognize(result, -40.0, cascade);
 
-                final CvSeq faces = cvHaarDetectObjects(grayImage, cascade, storage, 1.1, 3,
-                        CV_HAAR_DO_CANNY_PRUNING);
+                result = Utils.rotate(result, 40.0);
+                result = Utils.fit(result, grabbedImage.imageWidth, grabbedImage.imageHeight);
 
-                for (int i = 0; i < faces.total(); i++) {
-                    final CvRect rectangle = new CvRect(cvGetSeqElem(faces, i));
+                result = recognize(result, 40.0, cascade);
+                result = Utils.rotate(result, -40.0);
 
-                    final IplImage temp = cvCreateImage(cvGetSize(convert), convert.depth(), convert.nChannels());
-                    cvCopy(convert, temp);
-                    cvSetImageROI(temp, new CvRect(rectangle.x(), rectangle.y(), rectangle.width(), rectangle.height()));
+                //Mat result = recognize(toMat.convert(grabbedImage), 0.0, cascade);
 
-                    final IplImage cropped = cvCreateImage(cvGetSize(temp), temp.depth(), temp.nChannels());
-                    cvCopy(temp, cropped);
+                result = Utils.fit(result, grabbedImage.imageWidth, grabbedImage.imageHeight);
 
-                    if (mainForm.isToSave()) {
-                        final BufferedImage bi = Utils.convertToBufferedImage(cropped);
-                        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                        ImageIO.write(bi, "jpg", baos);
-
-                        final Mat mat = new Mat(cropped);
-                        final String name = mainForm.getTextName().getText();
-                        final HumanEntity human = humanService.getOrCreate(name);
-
-                        faceService.create(name, mat.type(), cropped.height(), cropped.width(), baos.toByteArray(), human);
-                        mainForm.setToSave(false);
-                    }
-
-                    cvRectangle(convert, cvPoint(rectangle.x(), rectangle.y()), cvPoint(rectangle.x() + rectangle.width(),
-                            rectangle.y() + rectangle.height()), CvScalar.BLUE, 3, CV_AA, 0);
-
-                    if (isInitialization) continue;
-                    final int recognizedFace = recognizer.recognize(cropped);
-
-                    final HumanEntity human = humanService.get((long) recognizedFace);
-                    final String text = human == null ? "Unknown" : human.getName();
-                    cvPutText(convert, text, cvPoint(rectangle.x(), rectangle.y() - 10), cvFont(3, 3),
-                            CvScalar.BLUE);
-
-                    cvReleaseImage(temp);
-                    cvReleaseImage(cropped);
-                }
-                mainForm.getImage().setIcon(new ImageIcon(Utils.convertToBufferedImage(convert)));
+                mainForm.getImage().setIcon(new ImageIcon(Utils.convertToBufferedImage(result)));
                 mainForm.getMainFrame().pack();
             }
             grabber.stop();
@@ -139,6 +114,53 @@ public class MainClass {
 
         } catch (final IOException e) {
             Logger.getLogger(FaceRecognizerApplication.class.getName()).log(Level.SEVERE, null, e);
+        }
+    }
+
+    private Mat recognize(Mat grabbedImage, double angle, CascadeClassifier cascade) throws IOException {
+        long first = System.currentTimeMillis();
+        final Mat rotated = Utils.rotate(grabbedImage, angle);
+
+        final RectVector facesVector = new RectVector();
+
+        cascade.detectMultiScale(rotated, facesVector, 1.1, 4, 1, new Size(),
+                new Size(rotated.size().width(), rotated.size().height()));
+
+        draw(facesVector, rotated);
+
+        System.out.println("angle: " + angle + "detect time: " + (System.currentTimeMillis() - first));
+
+        return rotated;
+    }
+
+    private void draw(RectVector facesVector, Mat image) throws IOException {
+        final Rect[] rects = facesVector.get();
+        for (int i = 0; i < rects.length; i++) {
+            final Rect rectangle = rects[i];
+
+            final Mat cropped = new Mat(image, rectangle);
+
+            if (mainForm.isToSave()) {
+                final BufferedImage bi = Utils.convertToBufferedImage(cropped);
+                final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                ImageIO.write(bi, "jpg", baos);
+
+                final Mat mat = new Mat(cropped);
+                final String name = mainForm.getTextName().getText();
+                final HumanEntity human = humanService.getOrCreate(name);
+
+                faceService.create(name, mat.type(), cropped.size().height(), cropped.size().width(), baos.toByteArray(), human);
+                mainForm.setToSave(false);
+            }
+
+            rectangle(image, rectangle, Scalar.BLUE, 3, CV_AA, 0);
+
+            if (isInitialization) continue;
+            final int recognizedFace = recognizer.recognize(cropped);
+
+            final HumanEntity human = humanService.get((long) recognizedFace);
+            final String text = human == null ? "Unknown" : human.getName();
+            putText(image, text, new Point(rectangle.x(), rectangle.y() - 10), 1, 2.0, Scalar.BLUE);
         }
     }
 }

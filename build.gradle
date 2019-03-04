@@ -27,7 +27,7 @@ repositories {
 dependencies {
     compile('org.springframework.boot:spring-boot-starter-data-jpa')
 
-    compile group: 'org.bytedeco', name: 'javacv-platform', version: '1.4.1'
+    compile group: 'org.bytedeco', name: 'javacv-platform', version: '1.4.4'
 
     compile "com.google.guava:guava:16+"
 
