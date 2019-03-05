@@ -1,9 +1,6 @@
 package com.mishagrodno.faceRecognizer.application;
 
 import org.bytedeco.javacpp.indexer.DoubleRawIndexer;
-import org.bytedeco.javacpp.indexer.UByteBufferIndexer;
-import org.bytedeco.javacpp.indexer.UByteRawIndexer;
-import org.bytedeco.javacpp.opencv_core;
 import org.bytedeco.javacpp.opencv_core.*;
 import org.bytedeco.javacpp.opencv_imgproc;
 import org.bytedeco.javacv.Frame;
@@ -15,11 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static java.lang.Math.cos;
-import static java.lang.Math.sin;
 import static org.bytedeco.javacpp.opencv_core.*;
-import static org.bytedeco.javacpp.opencv_cudawarping.warpAffine;
-import static org.bytedeco.javacpp.opencv_imgcodecs.imwrite;
 import static org.bytedeco.javacpp.opencv_imgproc.getRotationMatrix2D;
 
 /**
@@ -98,5 +91,11 @@ public class Utils {
         final int y = (image.size().height() - origianlHeight) / 2;
         final Rect rectangle = new Rect(x, y, originalWidth, origianlHeight);
         return new Mat(image, rectangle);
+    }
+
+    public static Mat mirrow(Mat image) {
+        final Mat dst = new Mat();
+        flip(image, dst, 1);
+        return dst;
     }
 }

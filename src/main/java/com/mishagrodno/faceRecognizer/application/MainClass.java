@@ -5,6 +5,8 @@ import com.mishagrodno.faceRecognizer.db.entity.HumanEntity;
 import com.mishagrodno.faceRecognizer.db.service.FaceService;
 import com.mishagrodno.faceRecognizer.db.service.HumanService;
 import org.bytedeco.javacpp.Loader;
+import org.bytedeco.javacpp.opencv_dnn;
+import org.bytedeco.javacpp.opencv_dnn.Net;
 import org.bytedeco.javacpp.opencv_face.FacemarkKazemi;
 import org.bytedeco.javacpp.opencv_objdetect.CascadeClassifier;
 import org.bytedeco.javacv.Frame;
@@ -15,8 +17,6 @@ import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -26,6 +26,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static org.bytedeco.javacpp.opencv_core.*;
+import static org.bytedeco.javacpp.opencv_imgcodecs.imwrite;
 import static org.bytedeco.javacpp.opencv_imgproc.*;
 
 /**
@@ -39,11 +40,15 @@ public class MainClass {
     private final FaceService faceService;
     private final Recognizer recognizer;
     private final HumanService humanService;
-    private final OpenCVFrameConverter.ToMat toMat = new OpenCVFrameConverter.ToMat();
     private final MainForm mainForm = new MainForm();
+    private final double scale = 1;
+
+    private final Net net = new Net();
+
     private boolean isInitialization;
 
-    private String classifierName = "frontal_face.xml";
+    private String frontalClassifierName = "frontal_face.xml";
+    private String profileClassifierName = "profile_face_1.xml";
 
     @Autowired
     public MainClass(FaceService faceService, Recognizer recognizer, HumanService humanService) {
@@ -58,7 +63,14 @@ public class MainClass {
     public void start() {
         try {
             final OpenCVFrameGrabber grabber = new OpenCVFrameGrabber(0);
+            grabber.setImageHeight(360);
+            grabber.setImageWidth(480);
+
+            System.out.println(grabber.getImageHeight());
+            System.out.println(grabber.getImageWidth());
+
             grabber.start();
+
             Frame grabbedImage = grabber.grab();
 
             mainForm.create(grabbedImage.imageHeight, grabbedImage.imageWidth);
@@ -67,81 +79,103 @@ public class MainClass {
                 recognizer.init();
                 isInitialization = false;
             });
-            grabber.setFrameRate(grabber.getFrameRate());
+            //grabber.setFrameRate(grabber.getFrameRate());
 
-            final URL classifierURL = getClass().getClassLoader().getResource(classifierName);
+            final URL frontalClassifierURL = getClass().getClassLoader().getResource(frontalClassifierName);
 
-            final String classifierLocation = Loader
-                    .extractResource(classifierURL, null, "classifier", ".xml")
+            final String frontalClassifierLocation = Loader
+                    .extractResource(frontalClassifierURL, null, "frontal-classifier", ".xml")
                     .getAbsolutePath();
 
-            final CascadeClassifier cascade = new CascadeClassifier(classifierLocation);
+            final CascadeClassifier frontalClassifier = new CascadeClassifier(frontalClassifierLocation);
 
-            final FacemarkKazemi facemark = FacemarkKazemi.create();
+            final URL profileClassifierURL = getClass().getClassLoader().getResource(profileClassifierName);
 
-            final URL landmarkURL = getClass().getClassLoader().getResource("face_landmark_model.dat");
-
-            final String landmarkLocation = Loader
-                    .extractResource(landmarkURL, null, "landmark", ".dat")
+            final String profileClassifierLocation = Loader
+                    .extractResource(profileClassifierURL, null, "profile-classifier", ".xml")
                     .getAbsolutePath();
 
-            facemark.loadModel(landmarkLocation);
+            final CascadeClassifier profileClassifier = new CascadeClassifier(profileClassifierLocation);
 
             recognizer.init();
             final OpenCVFrameConverter.ToMat toMat = new OpenCVFrameConverter.ToMat();
 
             while (mainForm.getMainFrame().isVisible() && (grabbedImage = grabber.grab()) != null) {
 
-                Mat result = recognize(toMat.convert(grabbedImage), 0.0, cascade);
-                result = recognize(result, -40.0, cascade);
+                long now = System.currentTimeMillis();
+
+                Mat matImage = toMat.convert(grabbedImage);
+
+                Mat result = new Mat();
+
+                resize(matImage, result, new Size((int) (matImage.size().width() / scale), (int) (matImage.size().height() / scale)));
+
+                result = recognize(result, 0.0, frontalClassifier, profileClassifier);
+                result = recognize(result, -40.0, frontalClassifier, profileClassifier);
 
                 result = Utils.rotate(result, 40.0);
-                result = Utils.fit(result, grabbedImage.imageWidth, grabbedImage.imageHeight);
+                result = Utils.fit(result, (int) (grabbedImage.imageWidth / scale), (int) (grabbedImage.imageHeight / scale));
 
-                result = recognize(result, 40.0, cascade);
+                result = recognize(result, 40.0, frontalClassifier, profileClassifier);
                 result = Utils.rotate(result, -40.0);
 
                 //Mat result = recognize(toMat.convert(grabbedImage), 0.0, cascade);
 
-                result = Utils.fit(result, grabbedImage.imageWidth, grabbedImage.imageHeight);
+                result = Utils.fit(result, (int) (grabbedImage.imageWidth / scale), (int) (grabbedImage.imageHeight / scale));
 
-                mainForm.getImage().setIcon(new ImageIcon(Utils.convertToBufferedImage(result)));
+                Mat normalSizedResult = new Mat();
+                resize(result, normalSizedResult, new Size(matImage.size().width(), matImage.size().height()));
+
+                mainForm.getImage().setIcon(new ImageIcon(Utils.convertToBufferedImage(normalSizedResult)));
                 mainForm.getMainFrame().pack();
+
+                System.out.println(System.currentTimeMillis() - now);
             }
             grabber.stop();
             mainForm.getMainFrame().dispose();
-            Utils.safeDelete(Paths.get(classifierLocation));
+            Utils.safeDelete(Paths.get(frontalClassifierLocation));
 
         } catch (final IOException e) {
             Logger.getLogger(FaceRecognizerApplication.class.getName()).log(Level.SEVERE, null, e);
         }
     }
 
-    private Mat recognize(Mat grabbedImage, double angle, CascadeClassifier cascade) throws IOException {
-        long first = System.currentTimeMillis();
+    private Mat recognize(Mat grabbedImage, double angle, CascadeClassifier frontalClassifier, CascadeClassifier profileClassifier) throws IOException {
         final Mat rotated = Utils.rotate(grabbedImage, angle);
 
-        final RectVector facesVector = new RectVector();
+        final RectVector frontalFacesVector = new RectVector();
+        final RectVector profileFacesVector = new RectVector();
+        final RectVector profileFacesVector1 = new RectVector();
 
-        cascade.detectMultiScale(rotated, facesVector, 1.1, 4, 1, new Size(),
+        frontalClassifier.detectMultiScale(rotated, frontalFacesVector, 1.1, 4, 1, new Size(),
                 new Size(rotated.size().width(), rotated.size().height()));
 
-        draw(facesVector, rotated);
+        draw(frontalFacesVector, rotated, Scalar.BLUE);
 
-        System.out.println("angle: " + angle + "detect time: " + (System.currentTimeMillis() - first));
+        profileClassifier.detectMultiScale(rotated, profileFacesVector, 1.1, 5, 1, new Size(),
+                new Size(rotated.size().width(), rotated.size().height()));
 
-        return rotated;
+        draw(profileFacesVector, rotated, Scalar.RED);
+
+        final Mat mirrowed = Utils.mirrow(rotated);
+        profileClassifier.detectMultiScale(mirrowed, profileFacesVector1, 1.1, 5, 1, new Size(),
+                new Size(rotated.size().width(), rotated.size().height()));
+
+        draw(profileFacesVector1, mirrowed, Scalar.GREEN);
+
+        return Utils.mirrow(mirrowed);
     }
 
-    private void draw(RectVector facesVector, Mat image) throws IOException {
+    private void draw(RectVector facesVector, Mat image, Scalar color) throws IOException {
         final Rect[] rects = facesVector.get();
-        for (int i = 0; i < rects.length; i++) {
-            final Rect rectangle = rects[i];
-
+        for (final Rect rectangle : rects) {
             final Mat cropped = new Mat(image, rectangle);
+            final Mat resizedCrop = new Mat();
+
+            resize(cropped, resizedCrop, new Size((int) (cropped.size().width() * scale), (int) (cropped.size().height() * scale)));
 
             if (mainForm.isToSave()) {
-                final BufferedImage bi = Utils.convertToBufferedImage(cropped);
+                final BufferedImage bi = Utils.convertToBufferedImage(resizedCrop);
                 final ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 ImageIO.write(bi, "jpg", baos);
 
@@ -149,14 +183,14 @@ public class MainClass {
                 final String name = mainForm.getTextName().getText();
                 final HumanEntity human = humanService.getOrCreate(name);
 
-                faceService.create(name, mat.type(), cropped.size().height(), cropped.size().width(), baos.toByteArray(), human);
+                faceService.create(name, mat.type(), resizedCrop.size().height(), resizedCrop.size().width(), baos.toByteArray(), human);
                 mainForm.setToSave(false);
             }
 
-            rectangle(image, rectangle, Scalar.BLUE, 3, CV_AA, 0);
+            rectangle(image, rectangle, color, 3, CV_AA, 0);
 
             if (isInitialization) continue;
-            final int recognizedFace = recognizer.recognize(cropped);
+            final int recognizedFace = recognizer.recognize(resizedCrop);
 
             final HumanEntity human = humanService.get((long) recognizedFace);
             final String text = human == null ? "Unknown" : human.getName();
