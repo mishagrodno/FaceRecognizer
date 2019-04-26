@@ -1,6 +1,6 @@
 buildscript {
     ext {
-        springBootVersion = '2.0.1.RELEASE'
+        springBootVersion = '2.1.4.RELEASE'
     }
     repositories {
         mavenCentral()
@@ -31,7 +31,7 @@ dependencies {
 
     compile "com.google.guava:guava:16+"
 
-    runtime('mysql:mysql-connector-java:5.1.6')
+    runtime('mysql:mysql-connector-java:8.0.15')
     runtime('org.postgresql:postgresql:9.4.1212')
 
     testCompile('org.springframework.boot:spring-boot-starter-test')
