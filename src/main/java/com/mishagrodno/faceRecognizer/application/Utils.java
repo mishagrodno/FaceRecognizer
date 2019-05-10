@@ -98,4 +98,26 @@ public class Utils {
         flip(image, dst, 1);
         return dst;
     }
+
+    public static boolean contains(Rect r1, Rect r2) {
+        //return (r2.x() >= r1.x() && r2.x() <= r1.x() + r1.width() && r2.y() >= r1.y() && r2.y() <= r1.y() + r1.height()) ||
+        //        (r2.x() + r2.width() >= r1.x() && r2.x() + r2.width() <= r1.x() + r1.width() && r2.y() >= r1.y() && r2.y() <= r1.y() + r1.height()) ||
+        //        (r2.x() >= r1.x() && r2.x() <= r1.x() + r1.width() && r2.y() + r2.height() >= r1.y() && r2.y() + r2.height() <= r1.y() + r1.height()) ||
+        //        (r2.x() + r2.width() >= r1.x() && r2.x() + r2.width() <= r1.x() + r1.width() && r2.y() + r2.height() >= r1.y() && r2.y() + r2.height() <= r1.y() + r1.height());
+
+        int x0 = r1.x();
+        int y0 = r1.y();
+
+        int x1 = r1.x() + r1.width();
+        int y1 = r1.y() + r1.height();
+
+        int x2 = r2.x();
+        int y2 = r2.y();
+
+        int x3 = r2.x() + r2.width();
+        int y3 = r2.y() + r2.height();
+
+        return !(x0 > x3 || x1 < x2 || y0 > y3 || y1 < y2);
+    }
+
 }
