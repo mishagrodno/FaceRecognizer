@@ -1,10 +1,12 @@
 package com.mishagrodno.faceRecognizer.application;
 
 import org.bytedeco.javacpp.Loader;
+import org.bytedeco.javacpp.opencv_core;
 import org.bytedeco.javacpp.opencv_core.Mat;
 import org.bytedeco.javacpp.opencv_core.Rect;
 import org.bytedeco.javacpp.opencv_core.RectVector;
 import org.bytedeco.javacpp.opencv_core.Size;
+import org.bytedeco.javacpp.opencv_objdetect;
 import org.bytedeco.javacpp.opencv_objdetect.CascadeClassifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,23 +45,14 @@ public class Detector {
     }
 
     public List<Rect> detectFaces(Mat image) {
-        final RectVector facesVector = new RectVector();
-
-        faceClassifier.detectMultiScale(image, facesVector, 1.1, 3, 1, new Size(),
-                new Size(image.size().width(), image.size().height()));
-
-        final List<Rect> filletedFaces = new ArrayList<>();
-        for (final Rect rect : facesVector.get()) {
-            if (filletedFaces.stream()
-                    .noneMatch(face -> Utils.contains(face, rect))) {
-                filletedFaces.add(rect);
-            }
-        }
-
-        return filletedFaces;
+        return detect(image, faceClassifier);
     }
 
     public List<Rect> detectEyes(Mat image) {
+        return detect(image, eyeClassifier);
+    }
+
+    private List<Rect> detect(Mat image, CascadeClassifier eyeClassifier) {
         final RectVector eyesVector = new RectVector();
 
         eyeClassifier.detectMultiScale(image, eyesVector, 1.1, 5, 1, new Size(),
@@ -68,10 +61,6 @@ public class Detector {
         final List<Rect> filteredEyes = new ArrayList<>();
 
         for (final Rect rect : eyesVector.get()) {
-            if (rect.height() > 70 || rect.width() > 70) {
-                continue;
-            }
-
             if (filteredEyes.stream().noneMatch(eye -> Utils.contains(eye, rect))) {
                 filteredEyes.add(rect);
             }

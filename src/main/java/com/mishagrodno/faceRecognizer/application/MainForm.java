@@ -21,8 +21,6 @@ public class MainForm {
     private JButton saveButton;
     private JButton reloadButton;
 
-    private boolean toSave;
-
     public void create(final int height, final int width) {
 
         mainFrame = new JFrame("Face Recognizing");
@@ -58,12 +56,6 @@ public class MainForm {
         panel.add(textName, constraints);
 
         saveButton = new JButton("save");
-        saveButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                toSave = true;
-            }
-        });
 
         constraints.gridx = 1;
         constraints.gridy = 2;
@@ -109,14 +101,6 @@ public class MainForm {
 
     public JButton getSaveButton() {
         return saveButton;
-    }
-
-    public boolean isToSave() {
-        return toSave;
-    }
-
-    public void setToSave(boolean toSave) {
-        this.toSave = toSave;
     }
 
     public JButton getReloadButton() {

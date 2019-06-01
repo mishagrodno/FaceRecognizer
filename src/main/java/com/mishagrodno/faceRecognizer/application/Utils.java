@@ -49,6 +49,10 @@ public class Utils {
         return TO_IPL_IMAGE.convert(PAINT_CONVERTER.convert(image));
     }
 
+    public static IplImage convertToIplImage(final Mat image) {
+        return TO_IPL_IMAGE.convert(TO_IPL_IMAGE.convert(image));
+    }
+
     /**
      * Converts {@link Frame} to {@link IplImage}.
      *

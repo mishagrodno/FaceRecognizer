@@ -67,7 +67,7 @@ public class DeepLearningFaceDetection {
             float leftY = srcIndexer.get(i, 4);
             float rightX = srcIndexer.get(i, 5);
             float rightY = srcIndexer.get(i, 6);
-            if (confidence > .8) {
+            if (confidence > .9) {
                 float tx = leftX * 300;//top left point's x
                 float ty = leftY * 300;//top left point's y
                 float bx = rightX * 300;//bottom right point's x
@@ -82,7 +82,7 @@ public class DeepLearningFaceDetection {
         capture.set(CAP_PROP_FRAME_WIDTH, 1280);
         capture.set(CAP_PROP_FRAME_HEIGHT, 720);
 
-        if (!capture.open(0)) {
+        if (!capture.open(2)) {
             System.out.println("Can not open the cam !!!");
         }
 
@@ -90,7 +90,7 @@ public class DeepLearningFaceDetection {
 
         CanvasFrame mainframe = new CanvasFrame("Face Detection", CanvasFrame.getDefaultGamma() / 2.2);
         mainframe.setDefaultCloseOperation(javax.swing.JFrame.EXIT_ON_CLOSE);
-        mainframe.setCanvasSize(600, 600);
+        mainframe.setCanvasSize(1280, 720);
         mainframe.setLocationRelativeTo(null);
         mainframe.setVisible(true);
 
@@ -99,7 +99,7 @@ public class DeepLearningFaceDetection {
                 long now = System.currentTimeMillis();
                 detectAndDraw(colorimg);
                 mainframe.showImage(converter.convert(colorimg));
-                //System.out.println(System.currentTimeMillis() - now);
+                System.out.println(System.currentTimeMillis() - now);
             }
         }
     }

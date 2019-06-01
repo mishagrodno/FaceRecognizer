@@ -5,27 +5,23 @@ import com.mishagrodno.faceRecognizer.db.entity.FaceEntity;
 import com.mishagrodno.faceRecognizer.db.service.FaceService;
 import org.bytedeco.javacpp.DoublePointer;
 import org.bytedeco.javacpp.IntPointer;
-import org.bytedeco.javacpp.opencv_core.IplImage;
 import org.bytedeco.javacpp.opencv_core.Mat;
 import org.bytedeco.javacpp.opencv_core.MatVector;
 import org.bytedeco.javacpp.opencv_face.FaceRecognizer;
 import org.bytedeco.javacpp.opencv_face.LBPHFaceRecognizer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.IOException;
 import java.nio.IntBuffer;
-import java.sql.SQLException;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.stream.StreamSupport;
 
 import static org.bytedeco.javacpp.opencv_core.CV_32SC1;
-import static org.bytedeco.javacpp.opencv_core.cvarrToMat;
-import static org.bytedeco.javacpp.opencv_imgproc.CV_BGR2GRAY;
-import static org.bytedeco.javacpp.opencv_imgproc.cvtColor;
+import static org.bytedeco.javacpp.opencv_imgcodecs.imwrite;
 
 /**
  * The Recognizer class.
@@ -35,7 +31,7 @@ import static org.bytedeco.javacpp.opencv_imgproc.cvtColor;
 @Component
 public class Recognizer {
 
-    private final Logger LOGGER = Logger.getLogger(Recognizer.class.getName());
+    private final Logger LOGGER = LoggerFactory.getLogger(Recognizer.class);
     private final FaceService faceService;
     private FaceRecognizer faceRecognizer;
 
@@ -49,6 +45,9 @@ public class Recognizer {
      */
     public void init() {
         final Iterable<FaceEntity> faces = faceService.all();
+        if (Iterables.isEmpty(faces)) {
+            return;
+        }
 
         final MatVector images = new MatVector();
         final Mat labels = new Mat(Iterables.size(faces), 1, CV_32SC1);
@@ -71,12 +70,16 @@ public class Recognizer {
      * @return recognized face.
      */
     public int recognize(final Mat face) {
-        final Mat grayFace = new Mat();
-        cvtColor(face, grayFace, CV_BGR2GRAY);
+        final long start = System.currentTimeMillis();
+        if (faceRecognizer == null || faceRecognizer.empty()) {
+            return -1;
+        }
 
         final IntPointer label = new IntPointer(1);
         final DoublePointer confidence = new DoublePointer(0);
-        faceRecognizer.predict(grayFace, label, confidence);
+        faceRecognizer.predict(face, label, confidence);
+
+        LOGGER.info("Took: {}", (System.currentTimeMillis() - start));
 
         return confidence.get() > 60 ? -1 : label.get(0);
     }
@@ -90,15 +93,12 @@ public class Recognizer {
     private Mat faceToMat(final FaceEntity face) {
         try {
             final BufferedImage faceImage = ImageIO.read(face.getContent().getBinaryStream());
-            final Mat tmp = new Mat(Utils.convertToIplImage(faceImage));
-            final Mat gray = new Mat();
-            cvtColor(tmp, gray, CV_BGR2GRAY);
+            final Mat gray = new Mat(Utils.convertToIplImage(faceImage));
+            //final Mat gray = new Mat();
+            imwrite("face_from_db.jpg", gray);
             return gray;
-        } catch (final SQLException e) {
-            LOGGER.log(Level.SEVERE, e.getLocalizedMessage(), e);
-            return null;
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (final Exception e) {
+            LOGGER.error(e.getLocalizedMessage(), e);
             return null;
         }
     }
